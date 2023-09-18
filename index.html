@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <div>
+        <h2>Read data from the PLC</h2>
+        <p>ArrayElement[0]: <span id="ae-0"></span></p>
+        <p>ArrayElement[1]: <span id="ae-1"></span></p>
+        <p>ArrayElement[2]: <span id="ae-2"></span></p>
+        <p>ArrayElement[3]: <span id="ae-3"></span></p>
+        <p>Word value: <span id="word-val"></span></p>
+
+        <h2>Check for bits | Toggle bits</h2>
+        <p>Bit[0]: <span id="b-0"></span> <button onclick="toggleBit(0)">Change bit 0</button></p>
+        <p>Bit[1]: <span id="b-1"></span> <button onclick="toggleBit(1)">Change bit 1</button></p>
+        <p>Bit[2]: <span id="b-2"></span> <button onclick="toggleBit(2)">Change bit 2</button></p>
+        <p>Bit[3]: <span id="b-3"></span> <button onclick="toggleBit(3)">Change bit 3</button></p>
+        <p>Bit[0]: <span id="b-4"></span> <button onclick="toggleBit(4)">Change bit 4</button></p>
+        <p>Bit[1]: <span id="b-5"></span> <button onclick="toggleBit(5)">Change bit 5</button></p>
+        <p>Bit[2]: <span id="b-6"></span> <button onclick="toggleBit(6)">Change bit 6</button></p>
+        <p>Bit[3]: <span id="b-7"></span> <button onclick="toggleBit(7)">Change bit 7</button></p>
+
+    </div>
+    <div>
+        <h2>Write data to the PLC</h2>
+        <p>WriteArrayElemen[0]: <input onchange="writeFromInputData(0,this.value)" name="val-0" id="val-0"
+                type="number"></p>
+        <p>WriteArrayElemen[1]: <input onchange="writeFromInputData(1,this.value)" name="val-1" id="val-1"
+                type="number"></p>
+
+    </div>
+    <script>
+        // Number to modify the bits on.
+        let bitNum = 0;
+
+        // Convert the splitted word back to one. Got it from the web
+        function getWordVal(byte2, byte1) {
+            var sign = byte1 & (1 << 7);
+            var x = (((byte1 & 0xFF) << 8) | (byte2 & 0xFF));
+            if (sign) {
+                result = 0xFFFF0000 | x;
+            }
+            return x;
+        }
+
+        // Got these from the web!
+        function bit_test(num, bit) {
+            return ((num >> bit) % 2 != 0)
+        }
+
+        function bit_set(num, bit) {
+            return num | 1 << bit;
+        }
+
+        function bit_clear(num, bit) {
+            return num & ~(1 << bit);
+        }
+
+        function bit_toggle(num, bit) {
+            return bit_test(num, bit) ? bit_clear(num, bit) : bit_set(num, bit);
+        }
+
+        function isKthBitSet(n, k) {
+            if ((n & (1 << k)) > 0)
+                return true;
+            else
+                return false;
+        }
+
+        // Sends the data array to the PLC
+        function sendValue() {
+            socket.send(sendArray);
+        }
+
+
+        function writeFromInputData(arr_off, data) {
+            sendArray[arr_off] = parseInt(data);
+            sendValue();
+        }
+        //
+        function toggleBit(bit_num) {
+            bitNum = bit_toggle(bitNum, bit_num);
+            sendArray[2] = bitNum;
+            console.log(sendArray);
+            sendValue();
+        }
+
+        // Websocket connection.
+        const socket = new WebSocket("ws://192.168.1.219:8081");
+
+        // sendArray to send data to the PLC with.
+        let sendArray = new Uint8Array(100);
+
+
+
+        // Connection opened
+        socket.addEventListener("open", (event) => {
+            console.log("Connection established");
+        });
+
+        let arrayDataBuffer;
+
+        // When there is a message on the websocket this gets triggered.
+        socket.addEventListener("message", async (event) => {
+            if (event.data == "write_udp_done") {
+                console.log("Data written to udp");
+            }
+            else {
+                // Read data processing
+                arrayDataBuffer = await event.data.arrayBuffer()
+                let arrayData = new Uint8Array(arrayDataBuffer);
+
+                document.getElementById('ae-0').innerHTML = arrayData[0];
+                document.getElementById('ae-1').innerHTML = arrayData[1];
+                document.getElementById('ae-2').innerHTML = arrayData[2];
+                document.getElementById('ae-3').innerHTML = arrayData[3];
+                document.getElementById('word-val').innerHTML = getWordVal(arrayData[4], arrayData[5]);
+
+                document.getElementById('b-0').innerHTML = isKthBitSet(arrayData[6], 0);
+                document.getElementById('b-1').innerHTML = isKthBitSet(arrayData[6], 1);
+                document.getElementById('b-2').innerHTML = isKthBitSet(arrayData[6], 2);
+                document.getElementById('b-3').innerHTML = isKthBitSet(arrayData[6], 3);
+                document.getElementById('b-4').innerHTML = isKthBitSet(arrayData[6], 4);
+                document.getElementById('b-5').innerHTML = isKthBitSet(arrayData[6], 5);
+                document.getElementById('b-6').innerHTML = isKthBitSet(arrayData[6], 6);
+                document.getElementById('b-7').innerHTML = isKthBitSet(arrayData[6], 7);
+
+
+
+            }
+
+        });
+
+
+        // Reads the values from the PLC
+        // You have to trigger it writing the "get_vals" to the gateway.
+        // The upper function will get triggerd on the message.
+        function getValues() {
+            if (socket.readyState !== WebSocket.CLOSED) {
+                socket.send("get_vals");
+            }
+        }
+
+
+        // Interval to read the values.
+        // Can be modified, but the PLC UDP write basically limits the data exchange rate.
+        let intval = setInterval(getValues, 200);
+
+    </script>
+</body>
+
+</html>
